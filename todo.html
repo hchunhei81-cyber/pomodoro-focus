@@ -5,102 +5,95 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#0b1120">
-<title>Cloud Todo - Tools</title>
+<title>Cloud Todo</title>
 <link rel="stylesheet" href="todo.css">
-<link rel="manifest" href="manifest.json">
-<link rel="icon" type="image/svg+xml" href="icon.svg">
-<link rel="apple-touch-icon" href="icon.svg">
 </head>
 <body>
 
 <div class="wrap">
 
   <!-- HEADER -->
-  <div class="topbar">
+  <header class="topbar">
     <div class="brand">
-      <div class="brand-icon">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M9 11l3 3L22 4"/>
-          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
-        </svg>
-      </div>
-      <div>
+      <div class="brand-mark">CT</div>
+      <div class="brand-text">
         <h1>Cloud Todo</h1>
         <p>Sync your tasks across devices</p>
       </div>
     </div>
     <div class="header-actions">
       <span id="userEmail" class="user-chip hidden"></span>
-      <button id="signOutBtn" class="btn btn-ghost btn-sm hidden">Sign out</button>
-      <a href="tools.html" class="back">Back to Tools</a>
+      <button id="signOutBtn" class="btn btn-ghost btn-sm hidden" type="button">Sign out</button>
     </div>
-  </div>
+  </header>
 
   <!-- AUTH SCREEN -->
-  <div id="authScreen" class="auth-screen">
+  <section id="authScreen" class="auth-screen">
     <div class="auth-card">
-      <h2 class="auth-title">Sign in</h2>
-      <p class="auth-sub">Your tasks sync to the cloud and are available on any device.</p>
+      <h2 class="auth-title">Welcome back</h2>
+      <p class="auth-sub">Sign in to sync your tasks across all your devices.</p>
 
-      <div class="auth-tabs">
-        <button class="auth-tab active" data-mode="signin">Sign in</button>
-        <button class="auth-tab" data-mode="signup">Create account</button>
+      <div class="auth-tabs" role="tablist">
+        <button class="auth-tab active" data-mode="signin" type="button" role="tab">Sign in</button>
+        <button class="auth-tab" data-mode="signup" type="button" role="tab">Create account</button>
       </div>
 
-      <form id="authForm" class="auth-form">
-        <label class="field-label">Email</label>
-        <input type="email" id="authEmail" class="field" placeholder="you@example.com" required autocomplete="email">
+      <form id="authForm" class="auth-form" novalidate>
+        <label class="field-label" for="authEmail">Email</label>
+        <input type="email" id="authEmail" name="email" class="field" placeholder="you@example.com" required autocomplete="email">
 
-        <label class="field-label">Password</label>
-        <input type="password" id="authPassword" class="field" placeholder="At least 6 characters" required minlength="6" autocomplete="current-password">
+        <label class="field-label" for="authPassword">Password</label>
+        <input type="password" id="authPassword" name="password" class="field" placeholder="At least 6 characters" required minlength="6" autocomplete="current-password">
 
         <button type="submit" id="authSubmit" class="btn btn-primary btn-full">Sign in</button>
       </form>
 
-      <div id="authError" class="auth-error hidden"></div>
-      <div id="authInfo" class="auth-info hidden"></div>
+      <div id="authError" class="auth-error hidden" role="alert"></div>
+      <div id="authInfo" class="auth-info hidden" role="status"></div>
     </div>
-  </div>
+  </section>
 
   <!-- TODO SCREEN -->
-  <div id="todoScreen" class="todo-screen hidden">
+  <section id="todoScreen" class="todo-screen hidden">
     <div class="card">
 
-      <div class="toolbar">
-        <form id="taskForm" class="task-form">
-          <input type="text" id="taskInput" class="field" placeholder="Add a task..." maxlength="200" autocomplete="off">
-          <button type="submit" class="btn btn-primary">Add</button>
-        </form>
-      </div>
+      <form id="taskForm" class="task-form" autocomplete="off">
+        <input type="text" id="taskInput" class="field" placeholder="Add a task..." maxlength="200" autocomplete="off">
+        <button type="submit" class="btn btn-primary">Add</button>
+      </form>
 
-      <div class="filters">
-        <button class="filter active" data-filter="all">All</button>
-        <button class="filter" data-filter="active">Active</button>
-        <button class="filter" data-filter="done">Done</button>
+      <div class="toolbar">
+        <div class="search-wrap">
+          <input type="search" id="searchInput" class="field field-search" placeholder="Search tasks..." autocomplete="off">
+        </div>
+        <div class="filters" role="tablist">
+          <button class="filter active" data-filter="all" type="button">All</button>
+          <button class="filter" data-filter="active" type="button">Active</button>
+          <button class="filter" data-filter="done" type="button">Done</button>
+        </div>
       </div>
 
       <div id="syncStatus" class="sync-status">
         <span class="sync-dot"></span>
-        <span id="syncText">Synced</span>
+        <span id="syncText">Ready</span>
       </div>
 
       <ul id="taskList" class="task-list"></ul>
 
-      <p id="emptyState" class="empty">
-        No tasks yet. Add one above.
-      </p>
+      <div id="emptyState" class="empty hidden"></div>
 
       <div class="stats-row">
         <span id="statsText" class="stats-text">0 active</span>
+        <button id="clearDoneBtn" class="btn btn-ghost btn-sm" type="button">Clear done</button>
       </div>
 
     </div>
-  </div>
+  </section>
 
 </div>
 
-<!-- Supabase SDK (ESM import from CDN) -->
+<div id="toast" class="toast hidden" role="status"></div>
+
 <script type="module" src="todo.js"></script>
 </body>
 </html>
