@@ -3,7 +3,7 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 /* ============================================================
    CONFIG - fill these in after creating your Supabase project
    ============================================================ */
-const SUPABASE_URL  = 'https://YOUR-PROJECT.supabase.co';
+const SUPABASE_URL  = 'https://mrdjzcaiqrkygxkgoajh.supabase.co';
 const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yZGp6Y2FpcXJreWd4a2dvYWpoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEzMzMwODQsImV4cCI6MjEwNjkwOTA4NH0.ftXZtwLGYMge2MtejHYfKyQ_AURvYlQ2G1rnuqGgOhY';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
