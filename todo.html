@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#0b1120">
+<title>Cloud Todo - Tools</title>
+<link rel="stylesheet" href="todo.css">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+</head>
+<body>
+
+<div class="wrap">
+
+  <!-- HEADER -->
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-icon">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 11l3 3L22 4"/>
+          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+        </svg>
+      </div>
+      <div>
+        <h1>Cloud Todo</h1>
+        <p>Sync your tasks across devices</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <span id="userEmail" class="user-chip hidden"></span>
+      <button id="signOutBtn" class="btn btn-ghost btn-sm hidden">Sign out</button>
+      <a href="tools.html" class="back">Back to Tools</a>
+    </div>
+  </div>
+
+  <!-- AUTH SCREEN -->
+  <div id="authScreen" class="auth-screen">
+    <div class="auth-card">
+      <h2 class="auth-title">Sign in</h2>
+      <p class="auth-sub">Your tasks sync to the cloud and are available on any device.</p>
+
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-mode="signin">Sign in</button>
+        <button class="auth-tab" data-mode="signup">Create account</button>
+      </div>
+
+      <form id="authForm" class="auth-form">
+        <label class="field-label">Email</label>
+        <input type="email" id="authEmail" class="field" placeholder="you@example.com" required autocomplete="email">
+
+        <label class="field-label">Password</label>
+        <input type="password" id="authPassword" class="field" placeholder="At least 6 characters" required minlength="6" autocomplete="current-password">
+
+        <button type="submit" id="authSubmit" class="btn btn-primary btn-full">Sign in</button>
+      </form>
+
+      <div id="authError" class="auth-error hidden"></div>
+      <div id="authInfo" class="auth-info hidden"></div>
+    </div>
+  </div>
+
+  <!-- TODO SCREEN -->
+  <div id="todoScreen" class="todo-screen hidden">
+    <div class="card">
+
+      <div class="toolbar">
+        <form id="taskForm" class="task-form">
+          <input type="text" id="taskInput" class="field" placeholder="Add a task..." maxlength="200" autocomplete="off">
+          <button type="submit" class="btn btn-primary">Add</button>
+        </form>
+      </div>
+
+      <div class="filters">
+        <button class="filter active" data-filter="all">All</button>
+        <button class="filter" data-filter="active">Active</button>
+        <button class="filter" data-filter="done">Done</button>
+      </div>
+
+      <div id="syncStatus" class="sync-status">
+        <span class="sync-dot"></span>
+        <span id="syncText">Synced</span>
+      </div>
+
+      <ul id="taskList" class="task-list"></ul>
+
+      <p id="emptyState" class="empty">
+        No tasks yet. Add one above.
+      </p>
+
+      <div class="stats-row">
+        <span id="statsText" class="stats-text">0 active</span>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- Supabase SDK (ESM import from CDN) -->
+<script type="module" src="todo.js"></script>
+</body>
+</html>
