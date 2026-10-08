@@ -76,13 +76,21 @@ function debounce(fn, ms) {
   return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
 }
 function throttle(fn, ms) {
-  let last = 0, timer = null;
+  let last = 0, timer = null, lastArgs = null;
   return (...a) => {
+    lastArgs = a;
     const now = Date.now();
     const remaining = ms - (now - last);
-    if (remaining <= 0) { last = now; fn(...a); }
-    else if (!timer) {
-      timer = setTimeout(() => { last = Date.now(); timer = null; fn(...a); }, remaining);
+    if (remaining <= 0) {
+      last = now;
+      fn(...lastArgs);
+      lastArgs = null;
+    } else if (!timer) {
+      timer = setTimeout(() => {
+        last = Date.now();
+        timer = null;
+        if (lastArgs) { fn(...lastArgs); lastArgs = null; }
+      }, remaining);
     }
   };
 }
@@ -96,6 +104,11 @@ function uuid() {
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
+function startOfDay(d) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
 
 /* ============================================================
    SMART INPUT PARSER
@@ -107,22 +120,19 @@ function parseTaskInput(raw) {
   const tags = [];
   let due = null;
 
-  // priority: !high !medium !low
-  const pm = text.match(/\s!(high|medium|low|h|m|l)\b/i);
+  const pm = text.match(/(^|\s)!(high|medium|low|h|m|l)(?=\s|$)/i);
   if (pm) {
     const map = { h: 'high', m: 'medium', l: 'low' };
-    const v = pm[1].toLowerCase();
+    const v = pm[2].toLowerCase();
     priority = map[v] || v;
     text = text.replace(pm[0], ' ');
   }
 
-  // tags: #tag
-  text = text.replace(/\s#([\w-]+)/g, (_, t) => { tags.push(t); return ' '; });
+  text = text.replace(/(^|\s)#([\w-]+)/g, (_, sp, t) => { tags.push(t); return sp; });
 
-  // due: @today @tomorrow @monday @2024-01-01
-  const dm = text.match(/\s@(\S+)/);
+  const dm = text.match(/(^|\s)@(\S+)/);
   if (dm) {
-    const v = dm[1].toLowerCase();
+    const v = dm[2].toLowerCase();
     const now = new Date();
     if (v === 'today') due = startOfDay(now).toISOString();
     else if (v === 'tomorrow') due = startOfDay(new Date(now.getTime() + 86400000)).toISOString();
@@ -138,11 +148,6 @@ function parseTaskInput(raw) {
   }
 
   return { text: text.replace(/\s+/g, ' ').trim(), priority, tags, due_date: due };
-}
-function startOfDay(d) {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
 }
 
 /* ============================================================
@@ -198,6 +203,50 @@ function setAuthMode(mode) {
   els.authPassword.setAttribute('autocomplete', mode === 'signin' ? 'current-password' : 'new-password');
   clearAuthMessages();
 }
+function updateFilterButtons() {
+  els.filters.forEach(b => b.classList.toggle('active', b.dataset.filter === state.filter));
+}
+
+/* ============================================================
+   MODALS (help + palette) — 关键修复区
+   ============================================================ */
+let helpReturnFocus = null;
+function openHelp() {
+  if (!els.helpPanel.classList.contains('hidden')) return;
+  helpReturnFocus = document.activeElement;
+  els.helpPanel.classList.remove('hidden');
+  queueMicrotask(() => { try { els.helpClose.focus(); } catch {} });
+}
+function closeHelp() {
+  if (els.helpPanel.classList.contains('hidden')) return;
+  els.helpPanel.classList.add('hidden');
+  if (helpReturnFocus && document.contains(helpReturnFocus)) {
+    try { helpReturnFocus.focus(); } catch {}
+  }
+  helpReturnFocus = null;
+}
+function isHelpOpen() { return !els.helpPanel.classList.contains('hidden'); }
+function isPaletteOpen() { return !els.palette.classList.contains('hidden'); }
+
+let paletteReturnFocus = null;
+function openPalette() {
+  if (isPaletteOpen()) return;
+  paletteReturnFocus = document.activeElement;
+  els.palette.classList.remove('hidden');
+  els.paletteInput.value = '';
+  paletteActive = 0;
+  renderPalette('');
+  queueMicrotask(() => { try { els.paletteInput.focus(); } catch {} });
+}
+function closePalette() {
+  if (!isPaletteOpen()) return;
+  els.palette.classList.add('hidden');
+  if (paletteReturnFocus && document.contains(paletteReturnFocus)) {
+    try { paletteReturnFocus.focus(); } catch {}
+  }
+  paletteReturnFocus = null;
+}
+function anyModalOpen() { return isHelpOpen() || isPaletteOpen(); }
 
 /* ============================================================
    THEME
@@ -211,9 +260,8 @@ function applyTheme(pref) {
   }
   root.dataset.theme = theme;
   els.themeBtn.textContent = theme === 'light' ? '☀️' : '🌙';
-  document.querySelector('meta[name="theme-color"]').setAttribute(
-    'content', theme === 'light' ? '#f8fafc' : '#0b1120'
-  );
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', theme === 'light' ? '#f8fafc' : '#0b1120');
 }
 function initTheme() {
   const pref = localStorage.getItem(THEME_KEY) || 'dark';
@@ -241,7 +289,6 @@ async function handleAuthSubmit(e) {
   if (password.length < 6) return showAuthError('Password must be at least 6 characters.');
 
   els.authSubmit.disabled = true;
-  const original = els.authSubmit.textContent;
   els.authSubmit.textContent = state.authMode === 'signin' ? 'Signing in...' : 'Creating account...';
 
   try {
@@ -261,7 +308,7 @@ async function handleAuthSubmit(e) {
     showAuthError(err.message || 'Something went wrong.');
   } finally {
     els.authSubmit.disabled = false;
-    els.authSubmit.textContent = original;
+    els.authSubmit.textContent = state.authMode === 'signin' ? 'Sign in' : 'Create account';
   }
 }
 async function signOut() {
@@ -316,6 +363,8 @@ function enterApp(user) {
   });
 }
 function leaveApp() {
+  closeHelp();
+  closePalette();
   state.user = null;
   state.tasks = [];
   state.filter = 'all';
@@ -325,10 +374,20 @@ function leaveApp() {
   state.selectedIds.clear();
   state.selectMode = false;
   state.pendingIds.clear();
+  state.nodeCache.forEach(n => n.remove());
   state.nodeCache.clear();
   state.undoStack = [];
+  state.exampleSeeded = false;
+
+  if (state.pomoTimer) { clearInterval(state.pomoTimer); state.pomoTimer = null; }
+  state.pomoRunning = false;
+  state.pomoRemaining = 25 * 60;
+  els.pomo.classList.add('hidden');
+  els.pomoToggle.textContent = 'Start';
+  renderPomo();
+
   els.searchInput.value = '';
-  els.filters.forEach(b => b.classList.toggle('active', b.dataset.filter === 'all'));
+  updateFilterButtons();
   els.authScreen.classList.remove('hidden');
   els.todoScreen.classList.add('hidden');
   els.userEmail.classList.add('hidden');
@@ -375,7 +434,6 @@ async function flushOfflineQueue() {
     }
   }
   setSync('ok', 'Synced');
-  loadTasks();
 }
 async function replayOp(op) {
   if (op.type === 'insert') {
@@ -468,8 +526,9 @@ async function addTask(rawText) {
   if (state.submitting) return;
   const parsed = parseTaskInput(rawText);
   if (!parsed.text) return;
-  if (state.editingId) { state.editingId = null; }
+  if (state.editingId) state.editingId = null;
 
+  state.submitting = true;
   const id = uuid();
   const optimistic = {
     id, user_id: state.user.id, text: parsed.text, done: false,
@@ -481,7 +540,6 @@ async function addTask(rawText) {
   state.tasks.push(optimistic);
   scheduleRender();
   setSync('syncing', 'Saving...');
-  state.submitting = true;
 
   const payload = {
     id, user_id: state.user.id, text: parsed.text, done: false,
@@ -499,12 +557,13 @@ async function addTask(rawText) {
       if (idx !== -1) state.tasks[idx] = normalizeTask(data);
       setSync('ok', 'Synced');
     }
+    const capturedId = id;
     pushUndo({
       label: 'Task added',
       undo: async () => {
-        state.tasks = state.tasks.filter(t => t.id !== id);
+        state.tasks = state.tasks.filter(t => t.id !== capturedId);
         scheduleRender();
-        try { await supabase.from('tasks').delete().eq('id', id).eq('user_id', state.user.id); } catch {}
+        try { await supabase.from('tasks').delete().eq('id', capturedId).eq('user_id', state.user.id); } catch {}
       }
     });
     scheduleRender();
@@ -541,7 +600,11 @@ async function toggleTask(id) {
     updateStats();
     pushUndo({
       label: newDone ? 'Task completed' : 'Task reopened',
-      undo: async () => { task.done = prev; scheduleRender(); await persistUpdate(id, { done: prev }); }
+      undo: async () => {
+        const t = state.tasks.find(x => x.id === id);
+        if (t) { t.done = prev; scheduleRender(); }
+        try { await persistUpdate(id, { done: prev }); } catch {}
+      }
     });
   } catch (err) {
     console.error(err);
@@ -558,7 +621,7 @@ async function updateTaskText(id, text) {
   const task = state.tasks.find(t => t.id === id);
   if (!task) return;
   const clean = String(text).trim();
-  if (!clean || clean === task.text) return;
+  if (!clean || clean === task.text) { scheduleRender(); return; }
   const prev = task.text;
   task.text = clean;
   state.pendingIds.add(id);
@@ -566,10 +629,14 @@ async function updateTaskText(id, text) {
   setSync('syncing', 'Saving...');
   try {
     await persistUpdate(id, { text: clean });
-    setSync('ok', 'Synced');
+    setSync('ok', navigator.onLine ? 'Synced' : 'Offline — queued');
     pushUndo({
       label: 'Task renamed',
-      undo: async () => { task.text = prev; scheduleRender(); await persistUpdate(id, { text: prev }); }
+      undo: async () => {
+        const t = state.tasks.find(x => x.id === id);
+        if (t) { t.text = prev; scheduleRender(); }
+        try { await persistUpdate(id, { text: prev }); } catch {}
+      }
     });
   } catch (err) {
     console.error(err);
@@ -580,11 +647,16 @@ async function updateTaskText(id, text) {
   } finally { state.pendingIds.delete(id); }
 }
 
+const persistNotesDebounced = debounce(async (id, notes) => {
+  try { await persistUpdate(id, { notes }); }
+  catch (e) { console.warn(e); }
+}, 400);
+
 async function updateTaskNotes(id, notes) {
   const task = state.tasks.find(t => t.id === id);
   if (!task) return;
   task.notes = notes;
-  try { await persistUpdate(id, { notes }); } catch (e) { console.warn(e); }
+  persistNotesDebounced(id, notes);
 }
 
 async function persistUpdate(id, data) {
@@ -594,14 +666,15 @@ async function persistUpdate(id, data) {
 }
 
 async function deleteTask(id) {
-  const task = state.tasks.find(t => t.id === id);
-  if (!task) return;
-  const backup = { ...task };
   const idx = state.tasks.findIndex(t => t.id === id);
-  state.tasks = state.tasks.filter(t => t.id !== id);
+  if (idx === -1) return;
+  const backup = { ...state.tasks[idx] };
+  state.tasks.splice(idx, 1);
   state.pendingIds.add(id);
+  if (state.focusedId === id) state.focusedId = null;
   scheduleRender();
   setSync('syncing', 'Saving...');
+
   try {
     if (!navigator.onLine) enqueue({ type: 'delete', id });
     else {
@@ -613,14 +686,16 @@ async function deleteTask(id) {
     pushUndo({
       label: 'Task deleted',
       undo: async () => {
-        state.tasks.splice(idx, 0, backup);
+        const insertAt = Math.min(idx, state.tasks.length);
+        state.tasks.splice(insertAt, 0, backup);
         scheduleRender();
-        const payload = {
-          id: backup.id, user_id: backup.user_id, text: backup.text, done: backup.done,
-          position: backup.position, notes: backup.notes, due_date: backup.due_date,
-          priority: backup.priority, tags: backup.tags
-        };
-        try { await supabase.from('tasks').insert(payload); } catch (e) { console.warn(e); }
+        try {
+          await supabase.from('tasks').insert({
+            id: backup.id, user_id: backup.user_id, text: backup.text, done: backup.done,
+            position: backup.position, notes: backup.notes, due_date: backup.due_date,
+            priority: backup.priority, tags: backup.tags
+          });
+        } catch (e) { console.warn(e); }
       }
     });
   } catch (err) {
@@ -642,19 +717,26 @@ async function clearDone() {
   ids.forEach(id => state.pendingIds.add(id));
   scheduleRender();
   setSync('syncing', 'Clearing...');
+
   try {
     if (!navigator.onLine) enqueue({ type: 'deleteMany', ids });
     else {
       const { error } = await supabase.from('tasks').delete().in('id', ids).eq('user_id', state.user.id);
       if (error) throw error;
     }
-    setSync('ok', 'Synced');
+    setSync('ok', navigator.onLine ? 'Synced' : 'Offline — queued');
     updateStats();
     showToast(`Cleared ${ids.length} task${ids.length === 1 ? '' : 's'}.`, async () => {
       state.tasks = backup;
       scheduleRender();
       for (const t of done) {
-        try { await supabase.from('tasks').insert({ ...t }); } catch {}
+        try {
+          await supabase.from('tasks').insert({
+            id: t.id, user_id: t.user_id, text: t.text, done: t.done,
+            position: t.position, notes: t.notes, due_date: t.due_date,
+            priority: t.priority, tags: t.tags
+          });
+        } catch {}
       }
     });
   } catch (err) {
@@ -670,16 +752,33 @@ async function bulkMarkDone() {
   const ids = [...state.selectedIds];
   if (!ids.length) return;
   const backup = state.tasks.map(t => ({ id: t.id, done: t.done }));
-  state.tasks.forEach(t => { if (ids.includes(t.id)) t.done = true; });
+  state.tasks.forEach(t => { if (ids.includes(t.id)) { t.done = true; t.updated_at = new Date().toISOString(); } });
   scheduleRender();
   try {
-    for (const id of ids) {
-      try { await persistUpdate(id, { done: true }); } catch {}
+    if (!navigator.onLine) {
+      ids.forEach(id => enqueue({ type: 'update', id, data: { done: true } }));
+    } else {
+      const { error } = await supabase.from('tasks').update({ done: true }).in('id', ids).eq('user_id', state.user.id);
+      if (error) throw error;
     }
-    showToast(`Marked ${ids.length} as done.`);
+    showToast(`Marked ${ids.length} as done.`, async () => {
+      backup.forEach(b => {
+        const t = state.tasks.find(x => x.id === b.id);
+        if (t) t.done = b.done;
+      });
+      scheduleRender();
+    });
     exitSelectMode();
     updateStats();
-  } catch (e) { console.error(e); }
+  } catch (e) {
+    console.error(e);
+    backup.forEach(b => {
+      const t = state.tasks.find(x => x.id === b.id);
+      if (t) t.done = b.done;
+    });
+    scheduleRender();
+    showToast('Bulk update failed.');
+  }
 }
 async function bulkDelete() {
   const ids = [...state.selectedIds];
@@ -694,10 +793,28 @@ async function bulkDelete() {
       const { error } = await supabase.from('tasks').delete().in('id', ids).eq('user_id', state.user.id);
       if (error) throw error;
     }
-    showToast(`Deleted ${ids.length} task(s).`, () => { state.tasks = backup; scheduleRender(); });
+    showToast(`Deleted ${ids.length} task(s).`, async () => {
+      state.tasks = backup;
+      scheduleRender();
+      const toRestore = backup.filter(t => ids.includes(t.id));
+      for (const t of toRestore) {
+        try {
+          await supabase.from('tasks').insert({
+            id: t.id, user_id: t.user_id, text: t.text, done: t.done,
+            position: t.position, notes: t.notes, due_date: t.due_date,
+            priority: t.priority, tags: t.tags
+          });
+        } catch {}
+      }
+    });
     exitSelectMode();
     updateStats();
-  } catch (e) { console.error(e); state.tasks = backup; scheduleRender(); }
+  } catch (e) {
+    console.error(e);
+    state.tasks = backup;
+    scheduleRender();
+    showToast('Bulk delete failed.');
+  }
 }
 
 /* ---- ORDER ---- */
@@ -726,7 +843,7 @@ const saveOrder = throttle(async () => {
   } finally {
     setTimeout(() => { state.suppressRealtime = false; }, 400);
   }
-}, 400);
+}, 500);
 
 /* ============================================================
    UNDO
@@ -786,9 +903,12 @@ function updateCounts() {
   const all = state.tasks.length;
   const active = state.tasks.filter(t => !t.done).length;
   const done = all - active;
-  document.querySelector('[data-count="all"]').textContent = all ? `(${all})` : '';
-  document.querySelector('[data-count="active"]').textContent = active ? `(${active})` : '';
-  document.querySelector('[data-count="done"]').textContent = done ? `(${done})` : '';
+  const cAll = document.querySelector('[data-count="all"]');
+  const cActive = document.querySelector('[data-count="active"]');
+  const cDone = document.querySelector('[data-count="done"]');
+  if (cAll) cAll.textContent = all ? `(${all})` : '';
+  if (cActive) cActive.textContent = active ? `(${active})` : '';
+  if (cDone) cDone.textContent = done ? `(${done})` : '';
 }
 
 function updateEmptyState(list) {
@@ -815,22 +935,29 @@ function renderTasks() {
   updateCounts();
 
   const seen = new Set();
-  const frag = document.createDocumentFragment();
+  let prevNode = null;
 
   for (const task of list) {
     seen.add(task.id);
-    const existing = state.nodeCache.get(task.id);
-    const li = buildOrPatchItem(existing, task);
-    frag.appendChild(li);
+    let li = state.nodeCache.get(task.id);
+    if (!li) {
+      li = document.createElement('li');
+      li.dataset.id = task.id;
+      li.setAttribute('role', 'listitem');
+      state.nodeCache.set(task.id, li);
+    }
+    patchTaskItem(li, task);
+    if (prevNode) {
+      if (prevNode.nextSibling !== li) prevNode.after(li);
+    } else {
+      if (els.taskList.firstChild !== li) els.taskList.prepend(li);
+    }
+    prevNode = li;
   }
 
-  // remove stale nodes
-  for (const [id, node] of state.nodeCache.entries()) {
+  for (const [id, node] of [...state.nodeCache.entries()]) {
     if (!seen.has(id)) { node.remove(); state.nodeCache.delete(id); }
   }
-  // reorder & append
-  els.taskList.innerHTML = '';
-  els.taskList.appendChild(frag);
 
   const active = state.tasks.filter(t => !t.done).length;
   els.statsText.textContent = `${active} active / ${state.tasks.length} total`;
@@ -840,16 +967,7 @@ function renderTasks() {
   updateBulkBar();
 }
 
-function buildOrPatchItem(existing, task) {
-  let li = existing;
-  if (!li) {
-    li = document.createElement('li');
-    li.className = 'task-item';
-    li.dataset.id = task.id;
-    li.setAttribute('role', 'listitem');
-    state.nodeCache.set(task.id, li);
-  }
-
+function patchTaskItem(li, task) {
   const isOverdue = task.due_date && !task.done && new Date(task.due_date) < new Date();
   li.className = 'task-item'
     + (task.done ? ' done' : '')
@@ -860,24 +978,23 @@ function buildOrPatchItem(existing, task) {
   const draggable = state.filter === 'all' && !state.search.trim() && !state.editingId && !state.selectMode;
   li.draggable = draggable;
 
-  // checkbox
   let check = li.querySelector('.task-check');
   if (!check) {
     check = document.createElement('button');
     check.type = 'button';
     check.className = 'task-check';
     check.dataset.action = 'toggle';
+    check.setAttribute('role', 'checkbox');
     li.appendChild(check);
   }
   check.className = 'task-check' + (task.done ? ' done' : '');
   check.setAttribute('aria-label', task.done ? 'Mark as not done' : 'Mark as done');
   check.setAttribute('aria-checked', String(task.done));
-  check.setAttribute('role', 'checkbox');
-  check.innerHTML = task.done
+  const wantCheckHTML = task.done
     ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>'
     : '';
+  if (check.innerHTML !== wantCheckHTML) check.innerHTML = wantCheckHTML;
 
-  // body
   let body = li.querySelector('.task-body');
   if (!body) {
     body = document.createElement('div');
@@ -886,28 +1003,33 @@ function buildOrPatchItem(existing, task) {
   }
 
   if (state.editingId === task.id) {
-    body.innerHTML = '';
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'task-edit-input';
-    input.value = task.text;
-    input.maxLength = 200;
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); commitEdit(input.value); }
-      else if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); }
-    });
-    input.addEventListener('blur', () => {
-      setTimeout(() => { if (state.editingId === task.id) commitEdit(input.value); }, 100);
-    });
-    body.appendChild(input);
-    queueMicrotask(() => { input.focus(); input.select(); });
-
-    const notes = document.createElement('textarea');
-    notes.className = 'task-notes';
-    notes.placeholder = 'Notes...';
-    notes.value = task.notes || '';
-    notes.addEventListener('blur', () => updateTaskNotes(task.id, notes.value.trim()));
-    body.appendChild(notes);
+    let input = body.querySelector('.task-edit-input');
+    let notes = body.querySelector('.task-notes');
+    if (!input) {
+      body.innerHTML = '';
+      input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'task-edit-input';
+      input.maxLength = 200;
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); commitEdit(input.value); }
+        else if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); }
+      });
+      input.addEventListener('blur', (e) => {
+        const related = e.relatedTarget;
+        if (related && body.contains(related)) return;
+        setTimeout(() => { if (state.editingId === task.id) commitEdit(input.value); }, 0);
+      });
+      body.appendChild(input);
+      notes = document.createElement('textarea');
+      notes.className = 'task-notes';
+      notes.placeholder = 'Notes...';
+      notes.addEventListener('input', () => updateTaskNotes(task.id, notes.value.trim()));
+      body.appendChild(notes);
+      if (input.value !== task.text) input.value = task.text;
+      if (notes.value !== (task.notes || '')) notes.value = task.notes || '';
+      queueMicrotask(() => { input.focus(); input.select(); });
+    }
   } else {
     body.innerHTML = '';
     const text = document.createElement('div');
@@ -932,7 +1054,6 @@ function buildOrPatchItem(existing, task) {
     if (metaHtml) body.appendChild(meta);
   }
 
-  // actions
   let actions = li.querySelector('.task-actions');
   if (!actions) {
     actions = document.createElement('div');
@@ -940,16 +1061,17 @@ function buildOrPatchItem(existing, task) {
     li.appendChild(actions);
   }
   if (state.editingId !== task.id && !state.selectMode) {
-    actions.innerHTML = `
-      <button class="task-icon-btn" data-action="pomo" title="Pomodoro">⏱</button>
-      <button class="task-icon-btn" data-action="edit" title="Edit">✎</button>
-      <button class="task-icon-btn danger" data-action="delete" title="Delete">✕</button>
-    `;
-  } else if (state.editingId !== task.id) {
+    if (actions.childElementCount === 0) {
+      actions.innerHTML = `
+        <button class="task-icon-btn" data-action="pomo" title="Pomodoro">⏱</button>
+        <button class="task-icon-btn" data-action="edit" title="Edit">✎</button>
+        <button class="task-icon-btn danger" data-action="delete" title="Delete">✕</button>
+      `;
+    }
+  } else if (actions.childElementCount > 0) {
     actions.innerHTML = '';
   }
 
-  // drag listeners (once)
   if (draggable && !li.dataset.dragBound) {
     li.dataset.dragBound = '1';
     li.addEventListener('dragstart', onDragStart);
@@ -958,14 +1080,12 @@ function buildOrPatchItem(existing, task) {
     li.addEventListener('drop', onDrop);
     li.addEventListener('dragend', onDragEnd);
   }
-
-  return li;
 }
 
 function formatDue(d) {
   const now = new Date();
-  const today = startOfDay(now);
   const target = startOfDay(d);
+  const today = startOfDay(now);
   const diffDays = Math.round((target - today) / 86400000);
   if (diffDays === 0) return 'Today';
   if (diffDays === 1) return 'Tomorrow';
@@ -977,6 +1097,7 @@ function formatDue(d) {
 
 function commitEdit(val) {
   const id = state.editingId;
+  if (!id) return;
   state.editingId = null;
   const task = state.tasks.find(t => t.id === id);
   if (task && val.trim() && val.trim() !== task.text) updateTaskText(id, val);
@@ -988,7 +1109,7 @@ function cancelEdit() {
 }
 
 /* ============================================================
-   EVENT DELEGATION on taskList
+   EVENT DELEGATION
    ============================================================ */
 els.taskList.addEventListener('click', (e) => {
   const li = e.target.closest('.task-item');
@@ -1001,14 +1122,11 @@ els.taskList.addEventListener('click', (e) => {
     return;
   }
   const action = e.target.closest('[data-action]')?.dataset.action;
-  if (!action) {
-    state.focusedId = id;
-    return;
-  }
+  if (!action) { state.focusedId = id; scheduleRender(); return; }
   if (action === 'toggle') toggleTask(id);
   else if (action === 'edit') { state.editingId = id; scheduleRender(); }
   else if (action === 'delete') deleteTask(id);
-  else if (action === 'pomo') openPomodoro();
+  else if (action === 'pomo') { openPomodoro(); }
 });
 
 /* ============================================================
@@ -1099,6 +1217,7 @@ function subscribeRealtime() {
           const removedId = payload.old?.id;
           if (!removedId || state.pendingIds.has(removedId)) return;
           state.tasks = state.tasks.filter(t => t.id !== removedId);
+          if (state.focusedId === removedId) state.focusedId = null;
           scheduleRender();
         }
       })
@@ -1175,14 +1294,13 @@ function updateStats() {
 /* ============================================================
    POMODORO
    ============================================================ */
-function openPomodoro() {
-  els.pomo.classList.remove('hidden');
-}
+function openPomodoro() { els.pomo.classList.remove('hidden'); }
 function tickPomo() {
   if (!state.pomoRunning) return;
   state.pomoRemaining--;
   if (state.pomoRemaining <= 0) {
     clearInterval(state.pomoTimer);
+    state.pomoTimer = null;
     state.pomoRunning = false;
     state.pomoRemaining = 25 * 60;
     els.pomoToggle.textContent = 'Start';
@@ -1223,20 +1341,15 @@ const COMMANDS = [
 ];
 let paletteActive = 0;
 let paletteFiltered = [];
-function openPalette() {
-  els.palette.classList.remove('hidden');
-  els.paletteInput.value = '';
-  paletteActive = 0;
-  renderPalette('');
-  setTimeout(() => els.paletteInput.focus(), 20);
-}
-function closePalette() {
-  els.palette.classList.add('hidden');
-}
 function renderPalette(q) {
   q = q.toLowerCase().trim();
   paletteFiltered = COMMANDS.filter(c => !q || c.label.toLowerCase().includes(q));
-  paletteActive = Math.min(paletteActive, paletteFiltered.length - 1);
+  if (paletteFiltered.length === 0) {
+    els.paletteList.innerHTML = '<li class="palette-item" style="opacity:.5;cursor:default">No matching command</li>';
+    paletteActive = -1;
+    return;
+  }
+  paletteActive = Math.max(0, Math.min(paletteActive, paletteFiltered.length - 1));
   els.paletteList.innerHTML = paletteFiltered.map((c, i) =>
     `<li class="palette-item${i === paletteActive ? ' active' : ''}" data-idx="${i}">
        <span>${escapeHtml(c.label)}</span>
@@ -1245,13 +1358,10 @@ function renderPalette(q) {
 }
 els.paletteList.addEventListener('click', (e) => {
   const li = e.target.closest('.palette-item');
-  if (!li) return;
+  if (!li || paletteActive === -1) return;
   const cmd = paletteFiltered[+li.dataset.idx];
   if (cmd) { closePalette(); cmd.run(); }
 });
-function updateFilterButtons() {
-  els.filters.forEach(b => b.classList.toggle('active', b.dataset.filter === state.filter));
-}
 
 /* ============================================================
    EVENTS
@@ -1266,6 +1376,7 @@ function bindEvents() {
   els.taskForm.addEventListener('submit', (e) => {
     e.preventDefault();
     const value = els.taskInput.value;
+    if (!value.trim()) return;
     els.taskInput.value = '';
     els.addBtn.disabled = true;
     addTask(value);
@@ -1274,7 +1385,6 @@ function bindEvents() {
   els.taskInput.addEventListener('input', () => {
     els.addBtn.disabled = !els.taskInput.value.trim();
   });
-  // multi-line paste
   els.taskInput.addEventListener('paste', (e) => {
     const text = e.clipboardData.getData('text');
     if (text.includes('\n')) {
@@ -1305,10 +1415,15 @@ function bindEvents() {
   els.bulkDelete.addEventListener('click', bulkDelete);
   els.bulkCancel.addEventListener('click', exitSelectMode);
 
-  els.helpBtn.addEventListener('click', () => els.helpPanel.classList.remove('hidden'));
-  els.helpClose.addEventListener('click', () => els.helpPanel.classList.add('hidden'));
-  els.helpPanel.addEventListener('click', (e) => { if (e.target === els.helpPanel) els.helpPanel.classList.add('hidden'); });
+  /* ---- help panel ---- */
+  els.helpBtn.addEventListener('click', openHelp);
+  els.helpClose.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); closeHelp(); });
+  els.helpPanel.addEventListener('click', (e) => { if (e.target === els.helpPanel) closeHelp(); });
+  els.helpPanel.addEventListener('mousedown', (e) => e.stopPropagation());
+
+  /* ---- command palette ---- */
   els.palette.addEventListener('click', (e) => { if (e.target === els.palette) closePalette(); });
+  els.palette.addEventListener('mousedown', (e) => e.stopPropagation());
   els.paletteInput.addEventListener('input', () => { paletteActive = 0; renderPalette(els.paletteInput.value); });
 
   els.pomoClose.addEventListener('click', () => els.pomo.classList.add('hidden'));
@@ -1320,7 +1435,7 @@ function bindEvents() {
       clearInterval(state.pomoTimer);
       state.pomoTimer = setInterval(tickPomo, 1000);
       notify('Pomodoro started', '25 minutes of focus.');
-    } else clearInterval(state.pomoTimer);
+    } else { clearInterval(state.pomoTimer); state.pomoTimer = null; }
   });
 
   window.addEventListener('online', () => {
@@ -1332,36 +1447,56 @@ function bindEvents() {
     els.offlineBanner.classList.remove('hidden');
   });
 
+  /* ---- global keyboard ---- */
   document.addEventListener('keydown', (e) => {
     const tag = document.activeElement?.tagName;
     const inInput = tag === 'INPUT' || tag === 'TEXTAREA';
 
-    // Ctrl+K palette
+    // Ctrl/Cmd+K → palette（toggle）
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-      e.preventDefault(); openPalette(); return;
-    }
-    // Ctrl+Z undo
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !inInput) {
-      e.preventDefault(); performUndo(); return;
-    }
-    // Ctrl+Enter submit
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-      if (document.activeElement === els.taskInput) { e.preventDefault(); els.taskForm.requestSubmit(); }
+      e.preventDefault();
+      if (isPaletteOpen()) closePalette(); else openPalette();
       return;
     }
-    if (e.key === 'Escape') {
-      if (!els.palette.classList.contains('hidden')) { closePalette(); return; }
-      if (!els.helpPanel.classList.contains('hidden')) { els.helpPanel.classList.add('hidden'); return; }
-      if (state.editingId) { cancelEdit(); return; }
-      if (state.selectMode) { exitSelectMode(); return; }
-      if (document.activeElement === els.searchInput) els.searchInput.blur();
+
+    // Ctrl/Cmd+Z → undo（非输入态）
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !inInput) {
+      e.preventDefault();
+      performUndo();
+      return;
     }
+
+    // Ctrl/Cmd+Enter → submit
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      if (document.activeElement === els.taskInput) {
+        e.preventDefault();
+        els.taskForm.requestSubmit();
+      }
+      return;
+    }
+
+    // Esc 最高优先级：先关 modal，再退编辑/选择/搜索
+    if (e.key === 'Escape') {
+      if (isPaletteOpen()) { e.preventDefault(); e.stopPropagation(); closePalette(); return; }
+      if (isHelpOpen()) { e.preventDefault(); e.stopPropagation(); closeHelp(); return; }
+      if (state.editingId) { e.preventDefault(); cancelEdit(); return; }
+      if (state.selectMode) { e.preventDefault(); exitSelectMode(); return; }
+      if (document.activeElement === els.searchInput) els.searchInput.blur();
+      return;
+    }
+
+    // 有 modal 打开时，其他快捷键一律不响应
+    if (anyModalOpen()) return;
+
+    // 输入态直接放过
     if (inInput) return;
 
-    // shortcuts
     if (e.key === 'n') { e.preventDefault(); els.taskInput.focus(); }
     else if (e.key === '/') { e.preventDefault(); els.searchInput.focus(); }
-    else if (e.key === '?') { e.preventDefault(); els.helpPanel.classList.remove('hidden'); }
+    else if (e.key === '?') {
+      e.preventDefault();
+      if (isHelpOpen()) closeHelp(); else openHelp();
+    }
     else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       const list = visibleTasks();
       if (!list.length) return;
@@ -1371,7 +1506,9 @@ function bindEvents() {
       else idx = (idx - 1 + list.length) % list.length;
       state.focusedId = list[idx].id;
       scheduleRender();
-      document.querySelector(`.task-item[data-id="${state.focusedId}"]`)?.scrollIntoView({ block: 'nearest' });
+      queueMicrotask(() => {
+        document.querySelector(`.task-item[data-id="${state.focusedId}"]`)?.scrollIntoView({ block: 'nearest' });
+      });
     }
     else if (e.key === ' ' && state.focusedId) {
       e.preventDefault(); toggleTask(state.focusedId);
@@ -1390,12 +1527,19 @@ function bindEvents() {
     }
   });
 
-  // palette keyboard nav
+  /* ---- palette keyboard nav ---- */
   els.paletteInput.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowDown') { e.preventDefault(); paletteActive = Math.min(paletteActive + 1, paletteFiltered.length - 1); renderPalette(els.paletteInput.value); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); paletteActive = Math.max(paletteActive - 1, 0); renderPalette(els.paletteInput.value); }
-    else if (e.key === 'Enter') {
+    if (e.key === 'ArrowDown') {
       e.preventDefault();
+      paletteActive = Math.min(paletteActive + 1, paletteFiltered.length - 1);
+      renderPalette(els.paletteInput.value);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      paletteActive = Math.max(paletteActive - 1, 0);
+      renderPalette(els.paletteInput.value);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (paletteActive === -1) return;
       const cmd = paletteFiltered[paletteActive];
       if (cmd) { closePalette(); cmd.run(); }
     }
@@ -1405,13 +1549,13 @@ function bindEvents() {
 }
 
 /* ============================================================
-   PWA (inline service worker)
+   PWA
    ============================================================ */
 function registerSW() {
   if (!('serviceWorker' in navigator)) return;
   const sw = `
     self.addEventListener('install', e => self.skipWaiting());
-    self.addEventListener('activate', e => self.clients.claim());
+    self.addEventListener('activate', e => e.clients.claim());
     self.addEventListener('fetch', e => {
       if (e.request.method !== 'GET') return;
       e.respondWith(
@@ -1440,6 +1584,7 @@ async function boot() {
   bindEvents();
   setAuthMode('signin');
   registerSW();
+  renderPomo();
   if (!navigator.onLine) els.offlineBanner.classList.remove('hidden');
 
   supabase.auth.onAuthStateChange((event, session) => {
