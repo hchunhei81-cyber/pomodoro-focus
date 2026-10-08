@@ -330,15 +330,15 @@ async function handleForgot() {
     showAuthError(err.message || 'Could not send reset email.');
   }
 }
-async function handleGithub() {
+async function handleOAuth(provider) {
   try {
     const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'github',
+      provider,  // 'google' | 'discord' | 'twitter' | 'apple' | ...
       options: { redirectTo: location.origin + location.pathname }
     });
     if (error) throw error;
   } catch (err) {
-    showAuthError(err.message || 'GitHub sign-in failed.');
+    showAuthError(err.message || `${provider} sign-in failed.`);
   }
 }
 
@@ -1370,7 +1370,9 @@ function bindEvents() {
   els.authForm.addEventListener('submit', handleAuthSubmit);
   els.authTabs.forEach(tab => tab.addEventListener('click', () => setAuthMode(tab.dataset.mode)));
   els.forgotBtn.addEventListener('click', handleForgot);
-  els.githubBtn.addEventListener('click', handleGithub);
+  document.querySelectorAll('[data-provider]').forEach(btn => {
+     btn.addEventListener('click', () => handleOAuth(btn.dataset.provider));
+   });
   els.signOutBtn.addEventListener('click', signOut);
 
   els.taskForm.addEventListener('submit', (e) => {
