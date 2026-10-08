@@ -57,6 +57,7 @@ const els = {
   skeleton: $('skeleton'), statsText: $('statsText'),
   clearDoneBtn: $('clearDoneBtn'), selectModeBtn: $('selectModeBtn'),
   exportBtn: $('exportBtn'), filters: document.querySelectorAll('.filter'),
+  exportBtn: $('exportBtn'), importBtn: $('importBtn'), importFile: $('importFile'),
   syncStatus: $('syncStatus'), syncText: $('syncText'), offlineCount: $('offlineCount'),
   toast: $('toast'), toastMsg: $('toastMsg'), toastUndo: $('toastUndo'),
   helpPanel: $('helpPanel'), helpClose: $('helpClose'),
@@ -1273,6 +1274,122 @@ function exportMarkdown() {
 }
 
 /* ============================================================
+   IMPORT
+   ============================================================ */
+function triggerImport() {
+  els.importFile.value = '';
+  els.importFile.click();
+}
+
+async function handleImportFile(e) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  let content;
+  try {
+    content = await file.text();
+  } catch (err) {
+    console.error(err);
+    showToast('Could not read file.');
+    return;
+  }
+
+  const parsed = parseMarkdownTasks(content);
+  if (!parsed.length) {
+    showToast('No tasks found in file.');
+    return;
+  }
+
+  if (!confirm(`Import ${parsed.length} task(s)?`)) return;
+
+  setSync('syncing', 'Importing...');
+  let ok = 0, fail = 0;
+
+  for (const t of parsed) {
+    const id = uuid();
+    const payload = {
+      id, user_id: state.user.id,
+      text: t.text, done: t.done,
+      position: nextPosition(),
+      due_date: t.due_date, priority: t.priority, tags: t.tags
+    };
+    const optimistic = {
+      ...payload, notes: '',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    state.pendingIds.add(id);
+    state.tasks.push(optimistic);
+    scheduleRender();
+
+    try {
+      if (!navigator.onLine) {
+        enqueue({ type: 'insert', data: payload });
+        ok++;
+      } else {
+        const { data, error } = await supabase.from('tasks').insert(payload).select().single();
+        if (error) throw error;
+        const idx = state.tasks.findIndex(x => x.id === id);
+        if (idx !== -1) state.tasks[idx] = normalizeTask(data);
+        ok++;
+      }
+    } catch (err) {
+      console.error(err);
+      state.tasks = state.tasks.filter(x => x.id !== id);
+      fail++;
+    } finally {
+      state.pendingIds.delete(id);
+    }
+  }
+
+  scheduleRender();
+  updateStats();
+  setSync('ok', navigator.onLine ? 'Synced' : 'Offline — queued');
+  showToast(`Imported ${ok} task${ok === 1 ? '' : 's'}${fail ? `, ${fail} failed` : ''}.`);
+}
+
+function parseMarkdownTasks(md) {
+  const lines = String(md).split(/\r?\n/);
+  const out = [];
+
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+
+    // 只处理 - [ ] / - [x] 或 * [ ] / + [ ]
+    const m = line.match(/^[-*+]\s+\[([ xX])\]\s+(.+)$/);
+    if (!m) continue;
+
+    const done = m[1].toLowerCase() === 'x';
+    const rest = m[2].trim();
+
+    // 复用现有的智能解析器
+    const parsed = parseTaskInput(rest);
+
+    // parseTaskInput 会把 "@2024-01-01" 转成 due_date，但如果它只识别了 @today/@tomorrow
+    // 这里再兜底解析一次 ISO 日期
+    let due = parsed.due_date;
+    if (!due) {
+      const dm = rest.match(/(^|\s)@(\d{4}-\d{2}-\d{2})(?=\s|$)/);
+      if (dm) due = new Date(dm[2] + 'T00:00:00').toISOString();
+    }
+
+    if (!parsed.text) continue;
+
+    out.push({
+      text: parsed.text,
+      done,
+      priority: parsed.priority,
+      tags: parsed.tags,
+      due_date: due
+    });
+  }
+
+  return out;
+}
+
+/* ============================================================
    STATS
    ============================================================ */
 function updateStats() {
@@ -1413,6 +1530,7 @@ function bindEvents() {
   els.clearDoneBtn.addEventListener('click', clearDone);
   els.selectModeBtn.addEventListener('click', () => state.selectMode ? exitSelectMode() : enterSelectMode());
   els.exportBtn.addEventListener('click', exportMarkdown);
+  els.importFile.addEventListener('change', handleImportFile);
   els.bulkDone.addEventListener('click', bulkMarkDone);
   els.bulkDelete.addEventListener('click', bulkDelete);
   els.bulkCancel.addEventListener('click', exitSelectMode);
