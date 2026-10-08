@@ -57,8 +57,11 @@
       </div>
 
       <div class="auth-divider"><span>or</span></div>
-      <button id="githubBtn" class="btn btn-ghost btn-full" type="button">Continue with GitHub</button>
-
+      <div class="oauth-grid">
+        <button class="btn btn-ghost" data-provider="github" type="button">GitHub</button>
+        <button class="btn btn-ghost" data-provider="google" type="button">Google</button>
+        <button class="btn btn-ghost" data-provider="discord" type="button">Discord</button>
+      </div>
       <div id="authError" class="auth-error hidden" role="alert"></div>
       <div id="authInfo" class="auth-info hidden" role="status"></div>
     </div>
