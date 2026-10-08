@@ -49,7 +49,7 @@ const els = {
   authForm: $('authForm'), authEmail: $('authEmail'), authPassword: $('authPassword'),
   authSubmit: $('authSubmit'), authError: $('authError'), authInfo: $('authInfo'),
   authTabs: document.querySelectorAll('.auth-tab'),
-  forgotBtn: $('forgotBtn'), githubBtn: $('githubBtn'),
+  forgotBtn: $('forgotBtn'),
   userEmail: $('userEmail'), signOutBtn: $('signOutBtn'),
   themeBtn: $('themeBtn'), helpBtn: $('helpBtn'),
   taskForm: $('taskForm'), taskInput: $('taskInput'), addBtn: $('addBtn'),
