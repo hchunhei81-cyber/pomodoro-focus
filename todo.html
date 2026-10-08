@@ -2,13 +2,17 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#0b1120">
 <title>Cloud Todo</title>
+<link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Cloud%20Todo%22%2C%22short_name%22%3A%22Todo%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%230b1120%22%2C%22theme_color%22%3A%22%230b1120%22%2C%22icons%22%3A%5B%5D%7D">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23f43f5e'/%3E%3Ctext x='16' y='22' font-size='16' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'%3ECT%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="todo.css">
 </head>
 <body>
+
+<div id="offlineBanner" class="offline-banner hidden">You are offline — changes will sync when back online.</div>
 
 <div class="wrap">
 
@@ -23,6 +27,8 @@
     </div>
     <div class="header-actions">
       <span id="userEmail" class="user-chip hidden"></span>
+      <button id="themeBtn" class="btn btn-ghost btn-sm" type="button" title="Toggle theme" aria-label="Toggle theme">🌙</button>
+      <button id="helpBtn" class="btn btn-ghost btn-sm" type="button" title="Shortcuts" aria-label="Shortcuts">?</button>
       <button id="signOutBtn" class="btn btn-ghost btn-sm hidden" type="button">Sign out</button>
     </div>
   </header>
@@ -48,6 +54,13 @@
         <button type="submit" id="authSubmit" class="btn btn-primary btn-full">Sign in</button>
       </form>
 
+      <div class="auth-links">
+        <button id="forgotBtn" class="link-btn" type="button">Forgot password?</button>
+      </div>
+
+      <div class="auth-divider"><span>or</span></div>
+      <button id="githubBtn" class="btn btn-ghost btn-full" type="button">Continue with GitHub</button>
+
       <div id="authError" class="auth-error hidden" role="alert"></div>
       <div id="authInfo" class="auth-info hidden" role="status"></div>
     </div>
@@ -58,41 +71,109 @@
     <div class="card">
 
       <form id="taskForm" class="task-form" autocomplete="off">
-        <input type="text" id="taskInput" class="field" placeholder="Add a task..." maxlength="200" autocomplete="off">
-        <button type="submit" class="btn btn-primary">Add</button>
+        <input type="text" id="taskInput" class="field" placeholder="Add a task... (try: buy milk !high #home @tomorrow)" maxlength="200" autocomplete="off">
+        <button type="submit" id="addBtn" class="btn btn-primary" disabled>Add</button>
       </form>
 
       <div class="toolbar">
         <div class="search-wrap">
-          <input type="search" id="searchInput" class="field field-search" placeholder="Search tasks..." autocomplete="off">
+          <input type="search" id="searchInput" class="field field-search" placeholder="Search tasks...  (/)" autocomplete="off">
         </div>
         <div class="filters" role="tablist">
-          <button class="filter active" data-filter="all" type="button">All</button>
-          <button class="filter" data-filter="active" type="button">Active</button>
-          <button class="filter" data-filter="done" type="button">Done</button>
+          <button class="filter active" data-filter="all" type="button">All <span class="count" data-count="all"></span></button>
+          <button class="filter" data-filter="active" type="button">Active <span class="count" data-count="active"></span></button>
+          <button class="filter" data-filter="done" type="button">Done <span class="count" data-count="done"></span></button>
         </div>
       </div>
 
       <div id="syncStatus" class="sync-status">
         <span class="sync-dot"></span>
         <span id="syncText">Ready</span>
+        <span id="offlineCount" class="offline-count hidden"></span>
       </div>
 
-      <ul id="taskList" class="task-list"></ul>
+      <div id="skeleton" class="skeleton hidden">
+        <div class="sk-item"></div><div class="sk-item"></div><div class="sk-item"></div>
+      </div>
+
+      <ul id="taskList" class="task-list" role="list"></ul>
 
       <div id="emptyState" class="empty hidden"></div>
 
       <div class="stats-row">
         <span id="statsText" class="stats-text">0 active</span>
-        <button id="clearDoneBtn" class="btn btn-ghost btn-sm" type="button">Clear done</button>
+        <div class="stats-actions">
+          <button id="selectModeBtn" class="btn btn-ghost btn-sm" type="button">Select</button>
+          <button id="exportBtn" class="btn btn-ghost btn-sm" type="button">Export</button>
+          <button id="clearDoneBtn" class="btn btn-ghost btn-sm hidden" type="button">Clear done</button>
+        </div>
       </div>
 
+      <div id="bulkBar" class="bulk-bar hidden">
+        <span id="bulkCount">0 selected</span>
+        <div class="bulk-actions">
+          <button id="bulkDone" class="btn btn-ghost btn-sm" type="button">Mark done</button>
+          <button id="bulkDelete" class="btn btn-ghost btn-sm danger" type="button">Delete</button>
+          <button id="bulkCancel" class="btn btn-ghost btn-sm" type="button">Cancel</button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- STATS PANEL -->
+    <div class="card stats-card" id="statsCard">
+      <h3 class="stats-title">Activity</h3>
+      <div class="stats-grid">
+        <div><div class="stat-num" id="statWeek">0</div><div class="stat-label">Done this week</div></div>
+        <div><div class="stat-num" id="statStreak">0</div><div class="stat-label">Day streak</div></div>
+        <div><div class="stat-num" id="statTotal">0</div><div class="stat-label">Total tasks</div></div>
+      </div>
     </div>
   </section>
 
 </div>
 
-<div id="toast" class="toast hidden" role="status"></div>
+<!-- TOAST -->
+<div id="toast" class="toast hidden" role="status">
+  <span id="toastMsg"></span>
+  <button id="toastUndo" class="toast-undo hidden" type="button">Undo</button>
+</div>
+
+<!-- SHORTCUTS PANEL -->
+<div id="helpPanel" class="modal hidden" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
+  <div class="modal-card">
+    <h3>Keyboard shortcuts</h3>
+    <ul class="shortcut-list">
+      <li><kbd>n</kbd> New task</li>
+      <li><kbd>/</kbd> Search</li>
+      <li><kbd>Ctrl</kbd>+<kbd>K</kbd> Command palette</li>
+      <li><kbd>?</kbd> This panel</li>
+      <li><kbd>Esc</kbd> Cancel / close</li>
+      <li><kbd>↑</kbd>/<kbd>↓</kbd> Navigate tasks</li>
+      <li><kbd>Space</kbd> Toggle selected</li>
+      <li><kbd>Del</kbd> Delete selected</li>
+      <li><kbd>Ctrl</kbd>+<kbd>Z</kbd> Undo last action</li>
+      <li><kbd>Ctrl</kbd>+<kbd>Enter</kbd> Submit input</li>
+      <li><kbd>Ctrl</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> Move task</li>
+    </ul>
+    <button id="helpClose" class="btn btn-primary btn-full" type="button">Got it</button>
+  </div>
+</div>
+
+<!-- COMMAND PALETTE -->
+<div id="palette" class="modal hidden" role="dialog" aria-modal="true" aria-label="Command palette">
+  <div class="modal-card palette-card">
+    <input id="paletteInput" class="field" placeholder="Type a command..." autocomplete="off">
+    <ul id="paletteList" class="palette-list"></ul>
+  </div>
+</div>
+
+<!-- POMODORO -->
+<div id="pomo" class="pomo hidden">
+  <span id="pomoTime">25:00</span>
+  <button id="pomoToggle" class="btn btn-ghost btn-sm" type="button">Start</button>
+  <button id="pomoClose" class="btn btn-ghost btn-sm" type="button">✕</button>
+</div>
 
 <script type="module" src="todo.js"></script>
 </body>
